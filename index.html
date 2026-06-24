@@ -11,20 +11,19 @@
       position: fixed; bottom: 20px; left: 20px; right: 20px;
       background: rgba(0,0,0,0.75); color:#fff; padding:12px 16px;
       border-radius: 8px; font-size: 14px; z-index: 1000;
-      pointer-events: none;
+    }
+    #startBtn {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      z-index: 2000; padding: 14px 30px; background: #1890ff; color: #fff;
+      border: none; border-radius: 30px; font-size: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="info" class="info-panel">点击下方按钮开始定位</div>
-
-  <!-- 添加一个全屏覆盖的启动按钮 -->
-  <button id="startBtn" style="
-    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
-    z-index:2000; padding:14px 30px; background:#1890ff; color:#fff;
-    border:none; border-radius:30px; font-size:16px; box-shadow:0 4px 12px rgba(0,0,0,0.3);
-  ">📍 开始实时定位</button>
+  <button id="startBtn">📍 开始实时定位</button>
 
   <!-- 高德 JS API 2.0 加载（含安全密钥） -->
   <script type="text/javascript">
@@ -41,8 +40,17 @@
     zoom: 12,
   });
 </script>
+
+  <!-- 应用逻辑：等待页面全部加载后再执行 -->
   <script>
-    // ========== 1. 消防器材数据（替换为你采集的坐标） ==========
+    window.onload = function() {
+      // 检查 AMap 是否已定义
+      if (typeof AMap === 'undefined') {
+        document.getElementById('info').innerHTML = '❌ 地图加载失败，请检查 Key 或刷新重试';
+        return;
+      }
+
+      // 器材数据（替换为你的数据）
     const equipmentData = [
       { id: 1, type: '灭火器', name: '1号车间东门', lng: 108.83806037, lat: 34.29864128 },
       { id: 2, type: '消火栓', name: '仓库北墙',   lng: 108.83745523, lat: 34.29870005 },
@@ -56,105 +64,80 @@
       mapStyle: 'amap://styles/light'
     });
 
-    // ========== 3. 添加消防器材图标 ==========
-    const markers = [];
-    equipmentData.forEach(eq => {
-      const marker = new AMap.Marker({
-        position: [eq.lng, eq.lat],
-        title: eq.name,
-        icon: eq.type === '消火栓'
-          ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png'   // 红色
-          : 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',  // 蓝色
-        offset: new AMap.Pixel(-12, -35),
-        map: map
-      });
-      marker.setLabel({
-        content: eq.name,
-        direction: 'top',
-        offset: new AMap.Pixel(0, -30),
-        style: { fontSize: '12px', background: '#fff', padding: '2px 6px', borderRadius: '4px' }
-      });
-      markers.push(marker);
-    });
-
-    // ========== 4. 定位与最近点导航 ==========
-    let userMarker = null;
-    let walking = null;
-    const infoPanel = document.getElementById('info');
-
-    // 监听定位成功
-    function onLocationComplete(data) {
-      const lng = data.position.lng;
-      const lat = data.position.lat;
-      const accuracy = data.accuracy || 0;
-
-      // 更新用户位置标记
-      if (!userMarker) {
-        userMarker = new AMap.Marker({
-          position: [lng, lat],
-          icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_bs.png', // 蓝色圆点
-          zIndex: 200,
+      // 添加器材标记
+      equipmentData.forEach(eq => {
+        const marker = new AMap.Marker({
+          position: [eq.lng, eq.lat],
+          title: eq.name,
+          icon: eq.type === '消火栓'
+            ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png'
+            : 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',
           map: map
         });
-      } else {
-        userMarker.setPosition([lng, lat]);
-      }
-
-      // 计算到每个器材的直线距离
-      let minDist = Infinity;
-      let nearest = null;
-      equipmentData.forEach(eq => {
-        const d = AMap.GeometryUtil.distance([lng, lat], [eq.lng, eq.lat]);
-        if (d < minDist) {
-          minDist = d;
-          nearest = eq;
-        }
+        marker.setLabel({
+          content: eq.name,
+          direction: 'top',
+          style: { fontSize:'12px', background:'#fff', padding:'2px 6px', borderRadius:'4px' }
+        });
       });
 
-      if (!nearest) return;
+      // 定位相关（由按钮触发）
+      let userMarker = null;
+      let walking = null;
+      const infoPanel = document.getElementById('info');
 
-      // 更新底部信息
-      infoPanel.innerHTML = `📍 最近器材：<b>${nearest.name}</b>（${nearest.type}），直线距离约 ${minDist.toFixed(0)} 米`;
+      function onLocationComplete(data) {
+        const lng = data.position.lng;
+        const lat = data.position.lat;
 
-      // 步行路径规划
-      if (!walking) {
-        walking = new AMap.Walking({ map: map, panel: null });
-      }
-      walking.search([lng, lat], [nearest.lng, nearest.lat], (status, result) => {
-        if (status === 'complete' && result.routes && result.routes.length) {
-          // 路线已绘制在地图上，同时可提取步行距离
-          const routeDist = result.routes[0].distance;
-          infoPanel.innerHTML += `<br/>🚶 步行距离约 ${routeDist.toFixed(0)} 米`;
+        if (!userMarker) {
+          userMarker = new AMap.Marker({
+            position: [lng, lat],
+            icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_bs.png',
+            zIndex: 200,
+            map: map
+          });
         } else {
-          infoPanel.innerHTML += `<br/>⚠️ 路径规划失败，请按照直线方向前进`;
+          userMarker.setPosition([lng, lat]);
         }
+
+        let minDist = Infinity, nearest = null;
+        equipmentData.forEach(eq => {
+          const d = AMap.GeometryUtil.distance([lng, lat], [eq.lng, eq.lat]);
+          if (d < minDist) { minDist = d; nearest = eq; }
+        });
+
+        if (!nearest) return;
+        infoPanel.innerHTML = `📍 最近器材：<b>${nearest.name}</b>（${nearest.type}），直线约 ${minDist.toFixed(0)} 米`;
+
+        if (!walking) walking = new AMap.Walking({ map: map });
+        walking.search([lng, lat], [nearest.lng, nearest.lat], (status, result) => {
+          if (status === 'complete' && result.routes?.length) {
+            const routeDist = result.routes[0].distance;
+            infoPanel.innerHTML += `<br/>🚶 步行距离约 ${routeDist.toFixed(0)} 米`;
+          }
+        });
+      }
+
+      function onLocationError(err) {
+        infoPanel.innerHTML = '❌ 定位失败，请检查 GPS 并允许位置权限';
+        console.warn(err);
+      }
+
+      document.getElementById('startBtn').addEventListener('click', function() {
+        this.style.display = 'none';
+        infoPanel.innerHTML = '正在获取位置…（请允许浏览器定位）';
+        AMap.plugin('AMap.Geolocation', () => {
+          const geolocation = new AMap.Geolocation({
+            enableHighAccuracy: true,
+            timeout: 10000
+          });
+          AMap.event.addListener(geolocation, 'complete', onLocationComplete);
+          AMap.event.addListener(geolocation, 'error', onLocationError);
+          geolocation.watchPosition();
+        });
       });
-    }
-
-    // 定位失败处理
-    function onLocationError(err) {
-      infoPanel.innerHTML = '❌ 定位失败，请检查 GPS/网络并授权位置信息';
-      console.warn('定位错误：', err);
-    }
-
-    // 初始化定位插件并开启持续监听
-document.getElementById('startBtn').addEventListener('click', function() {
-  // 隐藏按钮，避免重复点击
-  this.style.display = 'none';
-  
-  AMap.plugin('AMap.Geolocation', () => {
-    const geolocation = new AMap.Geolocation({
-      enableHighAccuracy: true,
-      timeout: 10000,
-      noIpLocate: 0,
-      noGeoLocation: 0
-    });
-    AMap.event.addListener(geolocation, 'complete', onLocationComplete);
-    AMap.event.addListener(geolocation, 'error', onLocationError);
-    geolocation.watchPosition();
-    infoPanel.innerHTML = '正在获取位置…（请允许浏览器定位）';
-  });
-});
+    };
   </script>
 </body>
 </html>
