@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>厂区消防器材导航</title>
+  <style>
+    * { margin:0; padding:0; }
+    #map { width:100%; height:100vh; }
+    .info-panel {
+      position: fixed; bottom: 20px; left: 20px; right: 20px;
+      background: rgba(0,0,0,0.75); color:#fff; padding:12px 16px;
+      border-radius: 8px; font-size: 14px; z-index: 1000;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info" class="info-panel">正在获取位置…</div>
+
+  <!-- 高德 JS API 2.0 加载（含安全密钥） -->
+  <script type="text/javascript">
+    window._AMapSecurityConfig = {
+      securityJsCode: 'c0fc7b5623962c500280b1b2a08c52b9' // 替换为你的安全密钥
+    };
+  </script>
+  <script src="https://webapi.amap.com/maps?v=2.0&key=7d17504d11eab8a03e255fdf551999a0&plugin=AMap.Geolocation,AMap.Walking,AMap.GeometryUtil"></script>
+
+  <script>
+    // ========== 1. 消防器材数据（替换为你采集的坐标） ==========
+    const equipmentData = [
+      { id: 1, type: '灭火器', name: '1号车间东门', lng: 108.83806037, lat: 34.29864128 },
+      { id: 2, type: '消火栓', name: '仓库北墙',   lng: 108.83745523, lat: 34.29870005 },
+      // … 继续添加
+    ];
+
+    // ========== 2. 初始化地图 ==========
+    const map = new AMap.Map('map', {
+      zoom: 18,
+      center: [116.397428, 39.909230], // 建议设成厂区中心点
+      mapStyle: 'amap://styles/light'
+    });
+
+    // ========== 3. 添加消防器材图标 ==========
+    const markers = [];
+    equipmentData.forEach(eq => {
+      const marker = new AMap.Marker({
+        position: [eq.lng, eq.lat],
+        title: eq.name,
+        icon: eq.type === '消火栓'
+          ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png'   // 红色
+          : 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',  // 蓝色
+        offset: new AMap.Pixel(-12, -35),
+        map: map
+      });
+      marker.setLabel({
+        content: eq.name,
+        direction: 'top',
+        offset: new AMap.Pixel(0, -30),
+        style: { fontSize: '12px', background: '#fff', padding: '2px 6px', borderRadius: '4px' }
+      });
+      markers.push(marker);
+    });
+
+    // ========== 4. 定位与最近点导航 ==========
+    let userMarker = null;
+    let walking = null;
+    const infoPanel = document.getElementById('info');
+
+    // 监听定位成功
+    function onLocationComplete(data) {
+      const lng = data.position.lng;
+      const lat = data.position.lat;
+      const accuracy = data.accuracy || 0;
+
+      // 更新用户位置标记
+      if (!userMarker) {
+        userMarker = new AMap.Marker({
+          position: [lng, lat],
+          icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_bs.png', // 蓝色圆点
+          zIndex: 200,
+          map: map
+        });
+      } else {
+        userMarker.setPosition([lng, lat]);
+      }
+
+      // 计算到每个器材的直线距离
+      let minDist = Infinity;
+      let nearest = null;
+      equipmentData.forEach(eq => {
+        const d = AMap.GeometryUtil.distance([lng, lat], [eq.lng, eq.lat]);
+        if (d < minDist) {
+          minDist = d;
+          nearest = eq;
+        }
+      });
+
+      if (!nearest) return;
+
+      // 更新底部信息
+      infoPanel.innerHTML = `📍 最近器材：<b>${nearest.name}</b>（${nearest.type}），直线距离约 ${minDist.toFixed(0)} 米`;
+
+      // 步行路径规划
+      if (!walking) {
+        walking = new AMap.Walking({ map: map, panel: null });
+      }
+      walking.search([lng, lat], [nearest.lng, nearest.lat], (status, result) => {
+        if (status === 'complete' && result.routes && result.routes.length) {
+          // 路线已绘制在地图上，同时可提取步行距离
+          const routeDist = result.routes[0].distance;
+          infoPanel.innerHTML += `<br/>🚶 步行距离约 ${routeDist.toFixed(0)} 米`;
+        } else {
+          infoPanel.innerHTML += `<br/>⚠️ 路径规划失败，请按照直线方向前进`;
+        }
+      });
+    }
+
+    // 定位失败处理
+    function onLocationError(err) {
+      infoPanel.innerHTML = '❌ 定位失败，请检查 GPS/网络并授权位置信息';
+      console.warn('定位错误：', err);
+    }
+
+    // 初始化定位插件并开启持续监听
+    AMap.plugin('AMap.Geolocation', () => {
+      const geolocation = new AMap.Geolocation({
+        enableHighAccuracy: true,   // 高精度
+        timeout: 10000,
+        noIpLocate: 0,
+        noGeoLocation: 0
+      });
+
+      // 持续监听位置变化
+      AMap.event.addListener(geolocation, 'complete', onLocationComplete);
+      AMap.event.addListener(geolocation, 'error', onLocationError);
+
+      geolocation.watchPosition();  // 开始监听
+    });
+  </script>
+</body>
+</html>
