@@ -17,7 +17,14 @@
 </head>
 <body>
   <div id="map"></div>
-  <div id="info" class="info-panel">正在获取位置…</div>
+  <div id="info" class="info-panel">点击下方按钮开始定位</div>
+
+  <!-- 添加一个全屏覆盖的启动按钮 -->
+  <button id="startBtn" style="
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+    z-index:2000; padding:14px 30px; background:#1890ff; color:#fff;
+    border:none; border-radius:30px; font-size:16px; box-shadow:0 4px 12px rgba(0,0,0,0.3);
+  ">📍 开始实时定位</button>
 
   <!-- 高德 JS API 2.0 加载（含安全密钥） -->
   <script type="text/javascript">
@@ -131,20 +138,23 @@
     }
 
     // 初始化定位插件并开启持续监听
-    AMap.plugin('AMap.Geolocation', () => {
-      const geolocation = new AMap.Geolocation({
-        enableHighAccuracy: true,   // 高精度
-        timeout: 10000,
-        noIpLocate: 0,
-        noGeoLocation: 0
-      });
-
-      // 持续监听位置变化
-      AMap.event.addListener(geolocation, 'complete', onLocationComplete);
-      AMap.event.addListener(geolocation, 'error', onLocationError);
-
-      geolocation.watchPosition();  // 开始监听
+document.getElementById('startBtn').addEventListener('click', function() {
+  // 隐藏按钮，避免重复点击
+  this.style.display = 'none';
+  
+  AMap.plugin('AMap.Geolocation', () => {
+    const geolocation = new AMap.Geolocation({
+      enableHighAccuracy: true,
+      timeout: 10000,
+      noIpLocate: 0,
+      noGeoLocation: 0
     });
+    AMap.event.addListener(geolocation, 'complete', onLocationComplete);
+    AMap.event.addListener(geolocation, 'error', onLocationError);
+    geolocation.watchPosition();
+    infoPanel.innerHTML = '正在获取位置…（请允许浏览器定位）';
+  });
+});
   </script>
 </body>
 </html>
